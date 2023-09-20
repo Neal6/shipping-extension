@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "Shipping Extension",
+  "description": "Shipping Extension",
+  "version": "1.0",
+  "action": {
+    "default_icon": "assets/free-shipping.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://sellercentral.amazon.com/*"],
+      "js": ["libs/jquery.js"]
+    },
+    {
+      "matches": ["https://sellercentral.amazon.com/*"],
+      "js": ["libs/jquery.sendkeys.js"]
+    },
+    {
+      "matches": ["https://sellercentral.amazon.com/*"],
+      "js": ["libs/xlsx.js"]
+    },
+    {
+      "matches": ["https://sellercentral.amazon.com/*"],
+      "js": ["libs/FileSaver.js"]
+    },
+    {
+      "matches": ["https://sellercentral.amazon.com/*"],
+      "js": ["scripts/index.js"],
+      "css": ["styles/index.css"]
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["assets/free-shipping.png", "assets/close.png"],
+      "matches": ["https://sellercentral.amazon.com/*"]
+    }
+  ]
+}
