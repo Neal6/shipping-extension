@@ -1,9 +1,11 @@
-const timeout = (ms) => {
+const delay = (ms) => {
   return new Promise((resolve) => setTimeout(resolve, ms));
 };
 
 const shippingIcon = chrome.runtime.getURL("assets/free-shipping.png");
 const closeIcon = chrome.runtime.getURL("assets/close.png");
+
+let productList = [];
 
 $(document).ready(function () {
   document.body.insertAdjacentHTML(
@@ -11,6 +13,7 @@ $(document).ready(function () {
     `
         <div id="shipping-shortcut-icon">
            <img id="icon" alt=''  src=${shippingIcon} />
+           <div class="lds-ellipsis"><div></div><div></div><div></div><div></div></div>
         </div>
         <div id="form-checking-shipping-wrapper">
            <div id="form-checking-shipping">
@@ -53,11 +56,12 @@ $(document).ready(function () {
         `
   );
 
-  // saveAs('https://www.africau.edu/images/default/sample.pdf', "hello world.pdf");
-
   const shippingShortcutIcon = $("#shipping-shortcut-icon");
   const shippingFormWrapper = $("#form-checking-shipping-wrapper");
   const closeFormIcon = $("#form-checking-close");
+  const shippingPrice = $("#shipping-price");
+  const btnSubmit = $("#btn-submit");
+  const loading = $(".lds-ellipsis");
 
   shippingShortcutIcon.click(() => {
     shippingFormWrapper.css({
@@ -133,14 +137,51 @@ $(document).ready(function () {
 
   // Upload File Function
   const uploadFile = async (file) => {
-    fileInput.value = null;
-    $("#file-upload-name").html(file?.name || "");
     const data = await file.arrayBuffer();
     /* data is an ArrayBuffer */
     const workbook = XLSX.read(data);
     const sheetData = workbook.Sheets[workbook.SheetNames[0]];
+
+    // export file
+
+    // const data2 = XLSX.utils.sheet_to_json(sheetData);
+    // console.log(data2);
+    // const workbook2 = {
+    //   Sheets: {
+    //     data: XLSX.utils.json_to_sheet([
+    //       {
+    //         Segment: "Government",
+    //         Country: "Canada",
+    //         Product: "Carretera",
+    //         Discount: "None",
+    //       },
+    //       {
+    //         Segment: "Government",
+    //         Country: "Germany",
+    //         Product: "Carretera",
+    //         Discount: "None",
+    //       },
+    //       {
+    //         Segment: "Midmarket",
+    //         Country: "France",
+    //         Product: "Carretera",
+    //         Discount: "None",
+    //       },
+    //     ]),
+    //   },
+    //   SheetNames: ["data"],
+    // };
+    // const excelBuffer = XLSX.write(workbook2, {
+    //   bookType: "xlsx",
+    //   type: "array",
+    // });
+    // const data3 = new Blob([excelBuffer], {
+    //   type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8",
+    // });
+    // saveAs(data3, "data_template" + ".xlsx");
+
     const colARegex = new RegExp(/A[0-9]+/gi);
-    const productList = [];
+    productList = [];
     for (const key in sheetData) {
       if (Object.hasOwnProperty.call(sheetData, key)) {
         colARegex.lastIndex = 0;
@@ -173,6 +214,283 @@ $(document).ready(function () {
         }
       }
     }
-    console.log(productList);
+    fileInput.value = null;
+    $("#file-upload-name").html(file?.name || "");
   };
+
+  btnSubmit.click(async () => {
+    if (productList && productList.length > 0) {
+      $("#file-upload-name").html("");
+      const response = await chrome.runtime.sendMessage({
+        type: "START_CHECKING",
+        data: productList,
+        price: shippingPrice.value || 0,
+      });
+      productList = [];
+      shippingFormWrapper.css({
+        display: "none",
+      });
+      loading.css({
+        display: "block",
+      });
+    } else {
+      alert("Vui lòng chọn file");
+    }
+  });
+
+  chrome.runtime.onMessage.addListener(async function (
+    request,
+    sender,
+    sendResponse
+  ) {
+    switch (request.type) {
+      case "NEXT_CHECKING":
+        window.location.href = "https://sellercentral.amazon.com/orders-v3";
+        break;
+      case "CHECKING_DONE":
+        alert("ĐÃ CHECKING XONG");
+        break;
+      default:
+        break;
+    }
+  });
+
+  const url = window.location.href;
+  if (url.includes("https://sellercentral.amazon.com/bulk-buy-shipping")) {
+    checkingBuyShip();
+  } else if (url.includes("https://sellercentral.amazon.com/orders-v3")) {
+    searchAndCheckUnship();
+  } else if (
+    url.includes("https://sellercentral.amazon.com/orders-st/shipping-label")
+  ) {
+    downloadPdfAndCheckingNextProduct();
+  }
+
+  async function searchAndCheckUnship() {
+    await waitUntilSelector("#myo-search-input");
+    const { product, price } = await chrome.runtime.sendMessage({
+      type: "GET_CHECKING_PRODUCT",
+    });
+    if (!product) {
+      return;
+    }
+    $("#myo-search-type").click();
+    await delay(1000);
+    document.querySelector("#myo-search-type_5").click();
+    $("#myo-search-input").sendkeys(product.nameSearch);
+    $("#myo-search-button > span > input").click();
+    await waitUntilSelector(`[data-test-id=refresh-button]`);
+    if ($("#orders-table").length === 0) {
+      chrome.runtime.sendMessage({
+        type: "NEXT_CHECKING",
+      });
+      return;
+    }
+    const numberOfOrderSearch = $("#orders-table > tbody > tr").length;
+    for (let index = 0; index < numberOfOrderSearch; index++) {
+      if (
+        $(
+          `#orders-table > tbody > tr:nth-child(${index + 1}) .unshipped-status`
+        ).length > 0
+      ) {
+        const orderId = document.querySelector(
+          `#orders-table > tbody > tr:nth-child(${
+            index + 1
+          }) > td:nth-child(3) .cell-body-title`
+        ).textContent;
+
+        const itemSub = document
+          .querySelector(
+            `#orders-table > tbody > tr:nth-child(${
+              index + 1
+            }) > td:nth-child(5) .myo-list-orders-product-name-cell > div:last-child`
+          )
+          .textContent?.split("$")?.[1];
+
+        await chrome.runtime.sendMessage({
+          type: "UNSHIP_EXPORT_ITEM",
+          data: { orderId, price: Number(itemSub) || 0 + Number(price) || 0 },
+        });
+
+        await waitUntilSelector(
+          `#orders-table > tbody > tr:nth-child(${
+            index + 1
+          }) > td:nth-child(3) [data-test-id=buyer-name-with-link]`
+        );
+        document
+          .querySelector(
+            `#orders-table > tbody > tr:nth-child(${
+              index + 1
+            }) > td:nth-child(1) > input[type=checkbox]`
+          )
+          .click();
+      }
+    }
+
+    await delay(1000);
+    if (
+      document.querySelector(
+        `[data-test-id="ab-bulk-buy-shipping"].a-button-disabled`
+      )
+    ) {
+      chrome.runtime.sendMessage({
+        type: "NEXT_CHECKING",
+      });
+      return;
+    }
+
+    document.querySelector(`[data-test-id="ab-bulk-buy-shipping"] a`).click();
+  }
+
+  async function checkingBuyShip() {
+    await waitUntilSelector(".a-color-price");
+    const { product, price } = await chrome.runtime.sendMessage({
+      type: "GET_CHECKING_PRODUCT",
+    });
+    if (!product) {
+      return;
+    }
+    const numberOfLineItem =
+      $("#MYO-ST-app > div > div:nth-child(2) > table > tr").length - 1;
+    if (
+      numberOfLineItem === 1 &&
+      $("#MYO-ST-app > div > div:nth-child(2) > table > tr:nth-child(2) td")
+        .length === 1
+    ) {
+      chrome.runtime.sendMessage({
+        type: "NEXT_CHECKING",
+      });
+      return;
+    }
+    for (let index = 0; index < numberOfLineItem; index++) {
+      $(
+        `#MYO-ST-app table tr:nth-child(${
+          index + 2
+        }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(1) input`
+      )
+        .val(" ")
+        .sendkeys(product.lb);
+
+      $(
+        `#MYO-ST-app table tr:nth-child(${
+          index + 2
+        }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(2) input`
+      )
+        .val(" ")
+        .sendkeys(product.oz);
+
+      document
+        .querySelector(
+          `#MYO-ST-app table tr:nth-child(${
+            index + 2
+          }) td:nth-child(2) span[id^="popover-dialog-add-package"]`
+        )
+        .click();
+
+      await delay(500);
+
+      $(
+        `#a-popover-content-${
+          index + 1
+        } > div > div > div:nth-child(2) > div:nth-child(1) > div > input`
+      )
+        .val(" ")
+        .sendkeys(product.lent);
+      $(
+        `#a-popover-content-${
+          index + 1
+        } > div > div > div:nth-child(2) > div:nth-child(4) > div > input`
+      )
+        .val(" ")
+        .sendkeys(product.wid);
+      $(
+        `#a-popover-content-${
+          index + 1
+        } > div > div > div:nth-child(2) > div:nth-child(7) > div > input`
+      )
+        .val(" ")
+        .sendkeys(product.hei);
+      $(".a-popover-wrapper .a-button-primary").click();
+    }
+
+    await waitUntilSelector(
+      `#MYO-ST-app input[value="PNG-LABEL_ONLY-6_0-4_0"]`
+    );
+
+    let indexRemove = [];
+
+    for (let index = 0; index < numberOfLineItem; index++) {
+      const orderId = document.querySelector(
+        `#MYO-ST-app table tr:nth-child(${
+          index + 2
+        }) td:nth-child(1) a.a-link-normal`
+      ).textContent;
+
+      const buyerName =
+        document
+          .querySelector(
+            `#MYO-ST-app table tr:nth-child(${index + 2}) td:nth-child(3)`
+          )
+          .textContent?.split(" to ")?.[1]
+          ?.split(" at ")?.[0] || "";
+
+      const shippingMethod =
+        document.querySelector(
+          `#MYO-ST-app table tr:nth-child(${
+            index + 2
+          }) td:nth-child(4) > div:nth-child(1) > div:nth-child(1) span`
+        ).textContent || "";
+      if (shippingMethod.toLowerCase().includes("usps first")) {
+        indexRemove.push(index + 2);
+      }
+    }
+
+    indexRemove.reverse().forEach((i) => {
+      document
+        .querySelector(
+          `#MYO-ST-app table tr:nth-child(${i}) td:last-child .a-button`
+        )
+        .click();
+    });
+
+    if (
+      $("#MYO-ST-app > div > div:nth-child(2) > table > tr:nth-child(2) td")
+        .length === 1
+    ) {
+      chrome.runtime.sendMessage({
+        type: "NEXT_CHECKING",
+      });
+      return;
+    }
+
+    document.querySelector('input[value="PNG-LABEL_ONLY-6_0-4_0"]').click();
+    await delay(1000);
+    // document
+    //   .querySelector(
+    //     "#MYO-ST-app > .page-body > div:nth-child(2) > div[style] .a-span-last input"
+    //   )
+    //   .click();
+  }
+
+  async function downloadPdfAndCheckingNextProduct() {
+    const { product, price } = await chrome.runtime.sendMessage({
+      type: "GET_CHECKING_PRODUCT",
+    });
+    if (!product) {
+      return;
+    }
+    saveAs(window.location.href, "hello world.pdf");
+    await delay(5);
+    window.close();
+  }
+
+  async function waitUntilSelector(selector) {
+    let stop = 0;
+    while (stop === 0) {
+      if (document.querySelector(selector)) {
+        stop = 1;
+      }
+      await delay(1000);
+    }
+  }
 });
