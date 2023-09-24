@@ -34,7 +34,7 @@
 
 #form-checking-shipping {
   width: 500px;
-  height: 550px;
+  height: 650px;
   position: fixed;
   left: 50%;
   top: 50%;
@@ -392,6 +392,23 @@ body {
 }
 
 #shipping-price::placeholder {
+  color: #33333378;
+}
+
+#account {
+  text-align: center;
+  border: none;
+  outline: none;
+  background-color: #add8e65c;
+  font-size: 14px;
+  width: 75%;
+  padding: 8px;
+  border-radius: 100px;
+  font-weight: 600;
+  margin: 24px 0px;
+}
+
+#account::placeholder {
   color: #33333378;
 }
 

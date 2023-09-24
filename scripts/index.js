@@ -50,6 +50,7 @@ $(document).ready(function () {
               </div>
               <div id="file-upload-name"></div>
               <input placeholder="GIÁ SHIPPING" id="shipping-price" />
+              <input placeholder="ACCOUNT" id="account" />
               <button id="btn-submit" >CHECKING</button>
            </div>
         </div>
@@ -60,6 +61,7 @@ $(document).ready(function () {
   const shippingFormWrapper = $("#form-checking-shipping-wrapper");
   const closeFormIcon = $("#form-checking-close");
   const shippingPrice = $("#shipping-price");
+  const account = $("#account");
   const btnSubmit = $("#btn-submit");
   const loading = $(".lds-ellipsis");
 
@@ -142,44 +144,6 @@ $(document).ready(function () {
     const workbook = XLSX.read(data);
     const sheetData = workbook.Sheets[workbook.SheetNames[0]];
 
-    // export file
-
-    // const data2 = XLSX.utils.sheet_to_json(sheetData);
-    // console.log(data2);
-    // const workbook2 = {
-    //   Sheets: {
-    //     data: XLSX.utils.json_to_sheet([
-    //       {
-    //         Segment: "Government",
-    //         Country: "Canada",
-    //         Product: "Carretera",
-    //         Discount: "None",
-    //       },
-    //       {
-    //         Segment: "Government",
-    //         Country: "Germany",
-    //         Product: "Carretera",
-    //         Discount: "None",
-    //       },
-    //       {
-    //         Segment: "Midmarket",
-    //         Country: "France",
-    //         Product: "Carretera",
-    //         Discount: "None",
-    //       },
-    //     ]),
-    //   },
-    //   SheetNames: ["data"],
-    // };
-    // const excelBuffer = XLSX.write(workbook2, {
-    //   bookType: "xlsx",
-    //   type: "array",
-    // });
-    // const data3 = new Blob([excelBuffer], {
-    //   type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8",
-    // });
-    // saveAs(data3, "data_template" + ".xlsx");
-
     const colARegex = new RegExp(/A[0-9]+/gi);
     productList = [];
     for (const key in sheetData) {
@@ -224,7 +188,8 @@ $(document).ready(function () {
       const response = await chrome.runtime.sendMessage({
         type: "START_CHECKING",
         data: productList,
-        price: shippingPrice.value || 0,
+        price: Number(shippingPrice.val()) || 0,
+        account: account.val(),
       });
       productList = [];
       shippingFormWrapper.css({
@@ -248,6 +213,8 @@ $(document).ready(function () {
         window.location.href = "https://sellercentral.amazon.com/orders-v3";
         break;
       case "CHECKING_DONE":
+        exportExcel(request.exportData);
+        await delay(2000);
         alert("ĐÃ CHECKING XONG");
         break;
       default:
@@ -306,10 +273,12 @@ $(document).ready(function () {
             }) > td:nth-child(5) .myo-list-orders-product-name-cell > div:last-child`
           )
           .textContent?.split("$")?.[1];
-
         await chrome.runtime.sendMessage({
           type: "UNSHIP_EXPORT_ITEM",
-          data: { orderId, price: Number(itemSub) || 0 + Number(price) || 0 },
+          data: {
+            orderId,
+            price: (Number(itemSub) || 0) + (Number(price) || 0),
+          },
         });
 
         await waitUntilSelector(
@@ -433,15 +402,30 @@ $(document).ready(function () {
           )
           .textContent?.split(" to ")?.[1]
           ?.split(" at ")?.[0] || "";
-
+      const uspsPrice =
+        document
+          .querySelector(
+            `#MYO-ST-app table tr:nth-child(${
+              index + 2
+            }) td:nth-child(6) .a-color-price`
+          )
+          .textContent?.split("$")?.[1] || "";
       const shippingMethod =
         document.querySelector(
           `#MYO-ST-app table tr:nth-child(${
             index + 2
           }) td:nth-child(4) > div:nth-child(1) > div:nth-child(1) span`
         ).textContent || "";
-      if (shippingMethod.toLowerCase().includes("usps first")) {
+      if (
+        !shippingMethod.toLowerCase().includes("usps first") &&
+        !shippingMethod.toLowerCase().includes("usps ground")
+      ) {
         indexRemove.push(index + 2);
+      } else {
+        await chrome.runtime.sendMessage({
+          type: "UNSHIP_EXPORT_ITEM",
+          data: { orderId, buyerName, uspsPrice: Number(uspsPrice) },
+        });
       }
     }
 
@@ -465,6 +449,10 @@ $(document).ready(function () {
 
     document.querySelector('input[value="PNG-LABEL_ONLY-6_0-4_0"]').click();
     await delay(1000);
+    chrome.runtime.sendMessage({
+      type: "NEXT_CHECKING",
+    });
+    return;
     // document
     //   .querySelector(
     //     "#MYO-ST-app > .page-body > div:nth-child(2) > div[style] .a-span-last input"
@@ -484,13 +472,51 @@ $(document).ready(function () {
     window.close();
   }
 
+  async function exportExcel(data) {
+    console.log(data);
+
+    // export file
+
+    const dataFormat = data.map((d) => {
+      return {
+        DATE: d.date,
+        ACCOUNT: d.account,
+        "ID AMZ": d.orderId,
+        "BUYER NAME": d.buyerName,
+        "GIÁ BÁN(= Item subtotal+Shipping)": d.price,
+        "GIÁ USPS": d.uspsPrice,
+        "TÊN SẢN PHẨM": d.nameExport,
+      };
+    });
+
+    const workbook = {
+      Sheets: {
+        data: XLSX.utils.json_to_sheet(dataFormat),
+      },
+      SheetNames: ["data"],
+    };
+    const excelBuffer = XLSX.write(workbook, {
+      bookType: "xlsx",
+      type: "array",
+    });
+    const dataExcel = new Blob([excelBuffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;charset=UTF-8",
+    });
+    saveAs(dataExcel, "DATA.xlsx");
+  }
+
   async function waitUntilSelector(selector) {
     let stop = 0;
+    let timeCheck = 0;
     while (stop === 0) {
+      if (timeCheck === 10) {
+        window.location.reload();
+      }
       if (document.querySelector(selector)) {
         stop = 1;
       }
       await delay(1000);
+      timeCheck++;
     }
   }
 });

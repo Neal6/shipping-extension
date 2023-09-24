@@ -2,6 +2,7 @@ let checkingData = [];
 let tabChecking = null;
 let priceChecking = 0;
 let exportData = [];
+let account = "";
 
 chrome.runtime.onInstalled.addListener(async () => {
   chrome.runtime.onMessage.addListener(async function (
@@ -14,6 +15,7 @@ chrome.runtime.onInstalled.addListener(async () => {
         checkingData = request.data;
         tabChecking = sender.tab.id;
         priceChecking = request.price;
+        account = request.account;
         await chrome.tabs.sendMessage(tabChecking, {
           type: "NEXT_CHECKING",
           data: checkingData[0],
@@ -27,10 +29,12 @@ chrome.runtime.onInstalled.addListener(async () => {
         if (checkingData.length === 0) {
           await chrome.tabs.sendMessage(tabChecking, {
             type: "CHECKING_DONE",
+            exportData,
           });
           tabChecking = null;
           priceChecking = 0;
           exportData = [];
+          account = "";
         } else {
           await chrome.tabs.sendMessage(tabChecking, {
             type: "NEXT_CHECKING",
@@ -48,9 +52,13 @@ chrome.runtime.onInstalled.addListener(async () => {
             ...request.data,
           };
         } else {
-          exportData.push(request.data);
+          exportData.push({
+            ...request.data,
+            nameExport: checkingData[0].nameExport,
+            account: account,
+            date: new Date().toLocaleDateString("en-GB"),
+          });
         }
-        console.log(exportData)
         sendResponse();
         break;
       default:
@@ -63,6 +71,7 @@ chrome.runtime.onInstalled.addListener(async () => {
       tabChecking = null;
       checkingData = [];
       exportData = [];
+      account = "";
     }
   });
 });
