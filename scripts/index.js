@@ -241,12 +241,13 @@ $(document).ready(function () {
     if (!product) {
       return;
     }
-    $("#myo-search-type").click();
+    $("#myo-search-type")?.click();
     await delay(1000);
-    document.querySelector("#myo-search-type_5").click();
+    document.querySelector("#myo-search-type_5")?.click();
     $("#myo-search-input").sendkeys(product.nameSearch);
-    $("#myo-search-button > span > input").click();
+    $("#myo-search-button > span > input")?.click();
     await waitUntilSelector(`[data-test-id=refresh-button]`);
+    await waitForLoading();
     if ($("#orders-table").length === 0) {
       chrome.runtime.sendMessage({
         type: "NEXT_CHECKING",
@@ -286,13 +287,14 @@ $(document).ready(function () {
             index + 1
           }) > td:nth-child(3) [data-test-id=buyer-name-with-link]`
         );
+        await waitForLoading();
         document
           .querySelector(
             `#orders-table > tbody > tr:nth-child(${
               index + 1
             }) > td:nth-child(1) > input[type=checkbox]`
           )
-          .click();
+          ?.click();
       }
     }
 
@@ -308,11 +310,12 @@ $(document).ready(function () {
       return;
     }
 
-    document.querySelector(`[data-test-id="ab-bulk-buy-shipping"] a`).click();
+    document.querySelector(`[data-test-id="ab-bulk-buy-shipping"] a`)?.click();
   }
 
   async function checkingBuyShip() {
-    await waitUntilSelector(".a-color-price");
+    await waitUntilSelector("#shipping-date-calendar");
+    await waitForLoading();
     const { product, price } = await chrome.runtime.sendMessage({
       type: "GET_CHECKING_PRODUCT",
     });
@@ -331,60 +334,76 @@ $(document).ready(function () {
       });
       return;
     }
-    for (let index = 0; index < numberOfLineItem; index++) {
-      $(
-        `#MYO-ST-app table tr:nth-child(${
-          index + 2
-        }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(1) input`
-      )
-        .val(" ")
-        .sendkeys(product.lb);
 
-      $(
-        `#MYO-ST-app table tr:nth-child(${
-          index + 2
-        }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(2) input`
-      )
-        .val(" ")
-        .sendkeys(product.oz);
-
-      document
-        .querySelector(
+    let countOk = 0;
+    while (countOk !== numberOfLineItem) {
+      for (let index = 0; index < numberOfLineItem; index++) {
+        if (
+          !document.querySelector(
+            `#MYO-ST-app table tr:nth-child(${index + 2}) .a-alert-content`
+          )
+        ) {
+          console.log("ok");
+          countOk++;
+          continue;
+        }
+        $(
           `#MYO-ST-app table tr:nth-child(${
             index + 2
-          }) td:nth-child(2) span[id^="popover-dialog-add-package"]`
+          }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(1) input`
         )
-        .click();
+          .val(" ")
+          .sendkeys(product.lb);
 
-      await delay(500);
+        $(
+          `#MYO-ST-app table tr:nth-child(${
+            index + 2
+          }) td:nth-child(2) .a-input-text-addon-group-wrapper:nth-of-type(2) input`
+        )
+          .val(" ")
+          .sendkeys(product.oz);
 
-      $(
-        `#a-popover-content-${
-          index + 1
-        } > div > div > div:nth-child(2) > div:nth-child(1) > div > input`
-      )
-        .val(" ")
-        .sendkeys(product.lent);
-      $(
-        `#a-popover-content-${
-          index + 1
-        } > div > div > div:nth-child(2) > div:nth-child(4) > div > input`
-      )
-        .val(" ")
-        .sendkeys(product.wid);
-      $(
-        `#a-popover-content-${
-          index + 1
-        } > div > div > div:nth-child(2) > div:nth-child(7) > div > input`
-      )
-        .val(" ")
-        .sendkeys(product.hei);
-      $(".a-popover-wrapper .a-button-primary").click();
+        document
+          .querySelector(
+            `#MYO-ST-app table tr:nth-child(${
+              index + 2
+            }) td:nth-child(2) span[id^="popover-dialog-add-package"]`
+          )
+          ?.click();
+
+        await delay(500);
+
+        $(
+          `#a-popover-content-${
+            index + 1
+          } > div > div > div:nth-child(2) > div:nth-child(1) > div > input`
+        )
+          .val(" ")
+          .sendkeys(product.lent);
+        $(
+          `#a-popover-content-${
+            index + 1
+          } > div > div > div:nth-child(2) > div:nth-child(4) > div > input`
+        )
+          .val(" ")
+          .sendkeys(product.wid);
+        $(
+          `#a-popover-content-${
+            index + 1
+          } > div > div > div:nth-child(2) > div:nth-child(7) > div > input`
+        )
+          .val(" ")
+          .sendkeys(product.hei);
+        $(".a-popover-wrapper .a-button-primary")?.click();
+      }
+      console.log("here");
+
+      await waitUntilSelector("#shipping-date-calendar");
+      await waitUntilSelector(
+        `#MYO-ST-app input[value="PNG-LABEL_ONLY-6_0-4_0"]`
+      );
+      await waitForLoading();
     }
-
-    await waitUntilSelector(
-      `#MYO-ST-app input[value="PNG-LABEL_ONLY-6_0-4_0"]`
-    );
 
     let indexRemove = [];
 
@@ -434,7 +453,7 @@ $(document).ready(function () {
         .querySelector(
           `#MYO-ST-app table tr:nth-child(${i}) td:last-child .a-button`
         )
-        .click();
+        ?.click();
     });
 
     if (
@@ -447,7 +466,7 @@ $(document).ready(function () {
       return;
     }
 
-    document.querySelector('input[value="PNG-LABEL_ONLY-6_0-4_0"]').click();
+    document.querySelector('input[value="PNG-LABEL_ONLY-6_0-4_0"]')?.click();
     await delay(1000);
     chrome.runtime.sendMessage({
       type: "NEXT_CHECKING",
@@ -517,6 +536,18 @@ $(document).ready(function () {
       }
       await delay(1000);
       timeCheck++;
+    }
+  }
+
+  async function waitForLoading() {
+    let stop = 0;
+    while (stop === 0) {
+      if (document.querySelector(".a-spinner")) {
+        stop = 0;
+      } else {
+        stop = 1;
+      }
+      await delay(1000);
     }
   }
 });
